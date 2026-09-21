@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en" data-screen="setup" data-state="normal" data-phase="pitching" data-status="ready" data-logo-pos="top" data-brand="off">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<title>Pitching + Q&amp;A Event Timer</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⏱️</text></svg>">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-dot" aria-hidden="true"></span>
+    <span class="brand-name">Event Timer</span>
+  </div>
+  <div class="topbar-right">
+    <span id="status-pill" class="pill" role="status" aria-live="polite">Ready</span>
+    <button id="btn-fullscreen" class="icon-btn" type="button" title="Fullscreen (F)">Fullscreen</button>
+  </div>
+</header>
+
+<!-- ─────────────────────────────  SETUP  ───────────────────────────── -->
+<section id="setup-screen" class="setup-screen" aria-label="Event setup">
+  <h1 class="setup-title">Event Setup</h1>
+
+  <div class="preset-grid" role="group" aria-label="Duration presets">
+    <button class="preset" type="button" data-preset="5">
+      <span class="preset-big">5 + 5</span>
+      <span class="preset-sub">5 min pitch · 5 min Q&amp;A</span>
+    </button>
+    <button class="preset" type="button" data-preset="7">
+      <span class="preset-big">7 + 7</span>
+      <span class="preset-sub">7 min pitch · 7 min Q&amp;A</span>
+    </button>
+    <button class="preset" type="button" data-preset="10">
+      <span class="preset-big">10 + 10</span>
+      <span class="preset-sub">10 min pitch · 10 min Q&amp;A</span>
+    </button>
+  </div>
+
+  <div class="custom-row">
+    <label class="field" for="input-pitching">
+      <span class="field-label">🎤 Pitching</span>
+      <span class="field-control">
+        <input id="input-pitching" type="number" min="0.5" max="120" step="0.5" value="5" inputmode="decimal">
+        <span class="field-unit">min</span>
+      </span>
+    </label>
+    <label class="field" for="input-qa">
+      <span class="field-label">❓ Q&amp;A</span>
+      <span class="field-control">
+        <input id="input-qa" type="number" min="0.5" max="120" step="0.5" value="5" inputmode="decimal">
+        <span class="field-unit">min</span>
+      </span>
+    </label>
+  </div>
+
+  <section class="branding" aria-label="Event branding">
+    <div class="branding-head">
+      <span class="branding-title">Branding</span>
+      <span class="branding-hint">Optional — shown on the timer screen</span>
+    </div>
+
+    <div class="branding-body">
+      <div class="logo-slot">
+        <span class="field-label">Event Logo</span>
+        <div id="logo-preview" class="logo-preview">
+          <img id="logo-preview-img" class="logo-preview-img" alt="Event logo preview" hidden>
+          <span id="logo-placeholder" class="logo-placeholder">Your Logo</span>
+        </div>
+        <div class="logo-actions">
+          <input id="input-logo-file" class="sr-only" type="file"
+                 accept="image/png,image/jpeg,image/svg+xml,image/webp,.png,.jpg,.jpeg,.svg,.webp">
+          <label class="btn btn-quiet logo-upload" for="input-logo-file">Upload Logo</label>
+          <button id="btn-logo-remove" class="btn btn-small" type="button" hidden>Remove Logo</button>
+        </div>
+      </div>
+
+      <div class="branding-options">
+        <label class="field field-stack" for="input-event-name">
+          <span class="field-label">Event Name</span>
+          <span class="field-control field-control-wide">
+            <input id="input-event-name" type="text" maxlength="60" autocomplete="off"
+                   placeholder="e.g. BioInnovation Launchpad 2026">
+          </span>
+        </label>
+
+        <div class="opt-row">
+          <span class="field-label">Show Logo</span>
+          <span class="toggle">
+            <input id="input-logo-show" type="checkbox" checked>
+            <label class="toggle-track" for="input-logo-show"><span class="toggle-thumb"></span></label>
+          </span>
+        </div>
+
+        <div class="opt-row">
+          <span class="field-label">Position</span>
+          <span class="seg" role="group" aria-label="Logo position">
+            <button id="btn-logo-top" class="seg-btn" type="button">Top</button>
+            <button id="btn-logo-bottom" class="seg-btn" type="button">Bottom</button>
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <p id="logo-note" class="logo-note">PNG, JPG, SVG or WebP. Kept on this computer only — nothing is uploaded.</p>
+  </section>
+
+  <button id="btn-start-event" class="btn btn-hero" type="button">Start Event<kbd>Space</kbd></button>
+
+  <div class="setup-foot">
+    <button id="btn-testbell" class="btn btn-quiet" type="button">Test Bell</button>
+    <span class="setup-note">One bell at 1:00 · two bells at 0:00. Test once before the event to unlock audio.</span>
+  </div>
+</section>
+
+<!-- ─────────────────────────────  TIMER  ───────────────────────────── -->
+<main id="timer-screen" class="stage" aria-label="Timer">
+  <div id="event-brand" class="event-brand" hidden>
+    <img id="event-logo" class="event-logo" alt="" hidden>
+    <div id="event-name" class="event-name" hidden></div>
+  </div>
+
+  <div id="phase-badge" class="phase-badge">
+    <span id="phase-icon" class="phase-icon" aria-hidden="true">🎤</span>
+    <span id="phase-label" class="phase-label">PITCHING</span>
+  </div>
+
+  <div id="clock" class="clock" role="timer" aria-live="off">05:00</div>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <div class="progress" aria-hidden="true">
+    <div id="progress-fill" class="progress-fill"></div>
+  </div>
+
+  <div class="meta">
+    <div class="meta-item">
+      <span class="meta-key">Duration</span>
+      <span id="meta-duration" class="meta-val">05:00</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-key">Next</span>
+      <span id="meta-next" class="meta-val">Bell at 01:00</span>
+    </div>
+    <div class="meta-item">
+      <span class="meta-key">Elapsed</span>
+      <span id="meta-elapsed" class="meta-val">00:00</span>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button id="btn-startqa" class="btn btn-hero btn-qa" type="button" hidden>Start Q&amp;A<kbd>Space</kbd></button>
+    <button id="btn-primary" class="btn btn-primary" type="button">Start<kbd>Space</kbd></button>
+    <div class="controls-secondary">
+      <button id="btn-skipqa" class="btn btn-small" type="button">Skip to Q&amp;A<kbd>S</kbd></button>
+      <button id="btn-restart" class="btn btn-small" type="button">Restart Phase</button>
+      <button id="btn-reset" class="btn btn-small" type="button">Reset<kbd>R</kbd></button>
+    </div>
+  </div>
+</main>
+
+<footer class="hints">
+  <span><kbd>Space</kbd> start / pause</span>
+  <span><kbd>Q</kbd> start Q&amp;A</span>
+  <span><kbd>S</kbd> skip to Q&amp;A</span>
+  <span><kbd>R</kbd> <kbd>R</kbd> reset (press twice)</span>
+  <span><kbd>F</kbd> fullscreen</span>
+</footer>
+
+<script src="timer-core.js"></script>
+<script src="bell.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

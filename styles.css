@@ -1,0 +1,740 @@
+/* Pitching + Q&A Event Timer — projector-first dark UI.
+   Two screens (data-screen: setup | timer) and three timer states
+   (data-state: normal | warning | ended), all driven from <html>.
+
+   Visual priority on the timer screen, largest to smallest:
+   remaining time → phase → warning / time's up → controls → everything else. */
+
+:root {
+  --bg: #0a0d14;
+  --bg-glow: #121826;
+  --surface: rgba(255, 255, 255, 0.04);
+  --surface-strong: rgba(255, 255, 255, 0.08);
+  --line: rgba(255, 255, 255, 0.10);
+  --text: #f2f5fa;
+  --muted: #8a94a8;
+
+  /* State colour — changes with the countdown. */
+  --accent: #5ea8ff;
+  --accent-soft: rgba(94, 168, 255, 0.16);
+  --clock: #ffffff;
+
+  /* Phase colour — never changes with state, so the phase is always
+     identifiable at a glance even during a warning or time's up. */
+  --phase: #5ea8ff;
+  --phase-soft: rgba(94, 168, 255, 0.14);
+
+  /* The countdown is always the dominant element; branding only ever trims
+     a little off it so the stage still fits without scrolling. */
+  --clock-size: clamp(5.5rem, 26vw, 26rem);
+  --logo-size: clamp(30px, 7.5vh, 92px);
+
+  --radius: 14px;
+  --pad: clamp(16px, 2.6vw, 34px);
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", "Roboto Mono", Menlo, Consolas, monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+}
+
+html[data-phase="qa"] {
+  --phase: #2dd4bf;
+  --phase-soft: rgba(45, 212, 191, 0.14);
+}
+
+html[data-state="warning"] {
+  --accent: #ffb020;
+  --accent-soft: rgba(255, 176, 32, 0.18);
+  --clock: #ffc65c;
+  --bg-glow: #241a06;
+}
+
+html[data-state="ended"] {
+  --accent: #ff4d4d;
+  --accent-soft: rgba(255, 77, 77, 0.22);
+  --clock: #ff7a7a;
+  --bg-glow: #3a0d12;
+}
+
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+
+body {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.4vh, 20px);
+  padding: var(--pad);
+  font-family: var(--sans);
+  color: var(--text);
+  background:
+    radial-gradient(120% 90% at 50% -20%, var(--bg-glow) 0%, transparent 60%),
+    var(--bg);
+  transition: background 500ms ease;
+  overflow: hidden;
+}
+
+/* Time's up floods the edges of the screen — impossible to mistake for the
+   amber one-minute warning, even from the back of a room. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  box-shadow: inset 0 0 0 10px var(--accent), inset 0 0 140px 20px var(--accent-soft);
+  transition: opacity 400ms ease;
+}
+html[data-state="ended"] body::after { opacity: 1; animation: edge 1.5s ease-in-out 4; }
+@keyframes edge { 50% { opacity: 0.35; } }
+
+/* Screen switching. */
+html[data-screen="setup"] #timer-screen,
+html[data-screen="timer"] #setup-screen { display: none; }
+
+/* ------------------------------------------------------------- top bar */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex: 0 0 auto;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.82rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.brand-dot {
+  width: 9px; height: 9px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+  transition: background 300ms ease, box-shadow 300ms ease;
+}
+html[data-status="running"] .brand-dot { animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 50% { box-shadow: 0 0 0 9px transparent; } }
+
+.topbar-right { display: flex; align-items: center; gap: 10px; }
+
+.pill {
+  padding: 7px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.icon-btn {
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+.icon-btn:hover { color: var(--text); border-color: var(--accent); }
+
+/* -------------------------------------------------------- setup screen */
+
+.setup-screen {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: clamp(14px, 2.4vh, 30px);
+  width: min(1000px, 100%);
+  margin: 0 auto;
+  /* The branding panel makes setup taller than the timer stage; on a short
+     laptop screen it scrolls instead of pushing Start Event out of reach. */
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.setup-title {
+  margin: 0;
+  font-size: clamp(1.1rem, 2vw, 1.5rem);
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-align: center;
+}
+
+.preset-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: clamp(10px, 1.6vw, 18px);
+}
+
+.preset {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: clamp(18px, 3.4vh, 34px) 12px;
+  border-radius: 18px;
+  border: 2px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease, transform 80ms ease;
+}
+.preset:hover { border-color: var(--accent); background: var(--surface-strong); }
+.preset:active { transform: translateY(1px); }
+.preset.is-selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  box-shadow: 0 0 0 4px var(--accent-soft);
+}
+.preset-big {
+  font-family: var(--mono);
+  font-size: clamp(1.8rem, 4.2vw, 3rem);
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.preset-sub { font-size: 0.8rem; color: var(--muted); }
+
+.custom-row {
+  display: flex;
+  justify-content: center;
+  gap: clamp(14px, 3vw, 40px);
+  flex-wrap: wrap;
+}
+
+.field { display: flex; align-items: center; gap: 12px; }
+.field-label {
+  font-size: 0.9rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.field-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.28);
+}
+.field-control input {
+  width: 78px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 1.15rem;
+  font-variant-numeric: tabular-nums;
+}
+.field-control input:focus { outline: none; }
+.field-unit { font-size: 0.8rem; color: var(--muted); }
+
+.setup-foot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.setup-note { font-size: 0.78rem; color: var(--muted); }
+
+/* -------------------------------------------------------- timer screen */
+
+.stage {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(6px, 1.1vh, 16px);
+  text-align: center;
+}
+
+.phase-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: clamp(8px, 1.2vw, 16px);
+  padding: clamp(6px, 1vh, 12px) clamp(16px, 2.4vw, 34px);
+  border-radius: 999px;
+  border: 2px solid var(--phase);
+  background: var(--phase-soft);
+  transition: border-color 300ms ease, background 300ms ease;
+}
+.phase-icon { font-size: clamp(1.2rem, 2.6vw, 2.2rem); line-height: 1; }
+.phase-label {
+  font-size: clamp(1.1rem, 3vw, 2.4rem);
+  font-weight: 800;
+  letter-spacing: 0.3em;
+  text-indent: 0.3em;           /* balance the tracking on the last letter */
+  color: var(--phase);
+  transition: color 300ms ease;
+}
+
+.clock {
+  font-family: var(--mono);
+  font-size: var(--clock-size);
+  line-height: 0.9;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+  color: var(--clock);
+  text-shadow: 0 0 70px var(--accent-soft);
+  transition: color 300ms ease;
+}
+html[data-state="ended"] .clock { animation: flash 1.1s ease-in-out 3; }
+@keyframes flash { 50% { opacity: 0.3; } }
+
+.banner[hidden] { display: none; }   /* `hidden` alone loses to display:flex */
+
+.banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: clamp(8px, 1.2vh, 14px) clamp(20px, 3vw, 44px);
+  border-radius: var(--radius);
+  border: 2px solid var(--accent);
+  background: var(--accent-soft);
+  max-width: min(94vw, 1000px);
+}
+.banner strong {
+  font-size: clamp(1rem, 2.4vw, 1.9rem);
+  font-weight: 800;
+  letter-spacing: 0.2em;
+  text-indent: 0.2em;
+  text-transform: uppercase;
+}
+.banner span { font-size: 0.85rem; color: var(--muted); }
+
+html[data-state="warning"] .banner { animation: breathe 2s ease-in-out infinite; }
+@keyframes breathe { 50% { background: transparent; } }
+
+/* Time's up gets a solid bar and much larger type than the warning pill. */
+html[data-state="ended"] .banner {
+  background: var(--accent);
+  border-color: var(--accent);
+  padding: clamp(10px, 1.6vh, 20px) clamp(26px, 4vw, 60px);
+}
+html[data-state="ended"] .banner strong {
+  font-size: clamp(1.4rem, 4.4vw, 3.4rem);
+  color: #16060a;
+}
+html[data-state="ended"] .banner span { color: rgba(22, 6, 10, 0.75); font-weight: 600; }
+
+.progress {
+  width: min(92vw, 1100px);
+  height: 8px;
+  border-radius: 999px;
+  background: var(--surface);
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  width: 0;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--accent), var(--clock));
+  transition: width 120ms linear, background 300ms ease;
+}
+
+.meta {
+  display: flex;
+  gap: clamp(16px, 4vw, 56px);
+  flex-wrap: wrap;
+  justify-content: center;
+  opacity: 0.75;
+}
+.meta-item { display: flex; flex-direction: column; gap: 3px; }
+.meta-key {
+  font-size: 0.66rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.meta-val {
+  font-family: var(--mono);
+  font-size: clamp(0.9rem, 1.4vw, 1.1rem);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ------------------------------------------------- branding (setup screen) */
+
+/* Visually hidden but still focusable and clickable through its <label>. */
+.sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  margin: -1px; padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.branding {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.6vh, 16px);
+  padding: clamp(12px, 1.8vh, 20px) clamp(14px, 2vw, 24px);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.branding-head {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.branding-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.branding-hint { font-size: 0.74rem; color: var(--muted); opacity: 0.75; }
+
+.branding-body {
+  display: grid;
+  grid-template-columns: minmax(190px, 260px) 1fr;
+  gap: clamp(14px, 2.4vw, 30px);
+  align-items: start;
+}
+
+.logo-slot { display: flex; flex-direction: column; gap: 8px; }
+
+.logo-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: clamp(64px, 10vh, 96px);
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px dashed var(--line);
+  background: rgba(0, 0, 0, 0.28);
+  overflow: hidden;
+}
+.logo-preview-img[hidden] { display: none; }
+.logo-preview-img {
+  max-width: 100%;
+  max-height: 100%;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+}
+.logo-placeholder[hidden] { display: none; }
+.logo-placeholder {
+  font-size: 0.76rem;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-indent: 0.24em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.logo-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.logo-upload { cursor: pointer; }
+/* The file input is .sr-only, so its label carries the focus ring. */
+#input-logo-file:focus-visible + .logo-upload { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+.logo-note {
+  margin: 0;
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+.logo-note.is-warn { color: #ffc65c; }
+
+.branding-options {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(10px, 1.4vh, 14px);
+}
+
+.field-stack { flex-direction: column; align-items: stretch; gap: 6px; }
+.field-control-wide { width: 100%; }
+.field-control-wide input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font: inherit;
+  font-size: 0.95rem;
+}
+.field-control-wide input::placeholder { color: var(--muted); opacity: 0.65; }
+.field-control-wide input:focus { outline: none; }
+
+.opt-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+/* Show/Hide switch. */
+.toggle { display: inline-flex; align-items: center; }
+.toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+.toggle-track {
+  display: inline-flex;
+  align-items: center;
+  width: 46px;
+  height: 26px;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+.toggle-thumb {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition: transform 150ms ease, background 150ms ease;
+}
+.toggle input:checked + .toggle-track { background: var(--accent-soft); border-color: var(--accent); }
+.toggle input:checked + .toggle-track .toggle-thumb { transform: translateX(20px); background: var(--accent); }
+.toggle input:focus-visible + .toggle-track { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* Top / Bottom segmented control. */
+.seg {
+  display: inline-flex;
+  padding: 3px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.28);
+}
+.seg-btn {
+  padding: 6px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+.seg-btn:hover { color: var(--text); }
+.seg-btn.is-on { background: var(--accent-soft); color: var(--text); box-shadow: inset 0 0 0 1px var(--accent); }
+.seg-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* -------------------------------------------------- branding (timer screen) */
+
+/*
+ * One block holding the logo and the event name. It sits above the phase
+ * badge by default; "bottom" pushes it past every other stage child with
+ * flex order, so the DOM (and the countdown) never moves.
+ */
+.event-brand[hidden] { display: none; }
+.event-brand {
+  order: -1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: clamp(4px, 0.8vh, 10px);
+  max-width: min(90vw, 1100px);
+  margin-bottom: clamp(2px, 0.8vh, 10px);
+}
+html[data-logo-pos="bottom"] .event-brand {
+  order: 1;
+  margin-bottom: 0;
+  margin-top: clamp(4px, 1.2vh, 16px);
+}
+
+.event-logo[hidden] { display: none; }
+.event-logo {
+  display: block;
+  height: var(--logo-size);
+  width: auto;
+  max-width: min(56vw, 520px);
+  object-fit: contain;          /* keeps the aspect ratio if max-width bites */
+  object-position: center;
+}
+
+.event-name[hidden] { display: none; }
+.event-name {
+  font-size: clamp(0.72rem, 1.35vw, 1.15rem);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-indent: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  opacity: 0.85;
+  line-height: 1.3;
+  max-width: min(90vw, 900px);
+  overflow-wrap: anywhere;
+}
+
+/* ------------------------------------------------------------ controls */
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: min(92vw, 900px);
+  margin-top: clamp(4px, 1.4vh, 18px);
+}
+
+.controls-secondary {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.btn {
+  position: relative;
+  padding: clamp(14px, 2.2vh, 22px) 26px;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: clamp(0.95rem, 1.5vw, 1.15rem);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, transform 80ms ease;
+}
+.btn[hidden] { display: none; }
+.btn:hover:not(:disabled) { background: var(--surface-strong); border-color: var(--accent); }
+.btn:active:not(:disabled) { transform: translateY(1px); }
+.btn:disabled { opacity: 0.32; cursor: not-allowed; }
+.btn:focus-visible, .preset:focus-visible, input:focus-visible, .icon-btn:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+.btn-primary,
+.btn-hero {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06090f;
+}
+.btn-primary:hover:not(:disabled),
+.btn-hero:hover:not(:disabled) { filter: brightness(1.1); background: var(--accent); }
+.btn-primary kbd, .btn-hero kbd { background: rgba(0, 0, 0, 0.22); color: inherit; border-color: transparent; }
+
+/* The one big call to action: Start Event, and Start Q&A at the handover. */
+.btn-hero {
+  width: 100%;
+  padding: clamp(18px, 3.4vh, 32px) 26px;
+  border-radius: 18px;
+  font-size: clamp(1.15rem, 2.6vw, 2rem);
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+.btn-qa {
+  background: #2dd4bf;
+  border-color: #2dd4bf;
+  animation: cta 1.8s ease-in-out infinite;
+}
+@keyframes cta { 50% { box-shadow: 0 0 0 12px rgba(45, 212, 191, 0.12); } }
+
+.btn-primary { width: 100%; max-width: 520px; }
+
+.btn-small {
+  padding: 9px 16px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--muted);
+  background: transparent;
+}
+.btn-small:hover:not(:disabled) { color: var(--text); }
+
+/* Reset is armed by the first press and only fires on the second. */
+.btn-small.is-armed {
+  color: #ff8080;
+  border-color: #ff4d4d;
+  background: rgba(255, 77, 77, 0.12);
+  font-weight: 700;
+}
+
+.btn-quiet { padding: 10px 20px; font-size: 0.9rem; }
+
+kbd {
+  display: inline-block;
+  margin-left: 10px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.06);
+  font-family: var(--mono);
+  font-size: 0.72em;
+  color: var(--muted);
+  vertical-align: middle;
+}
+
+/* --------------------------------------------------------------- hints */
+
+.hints {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 22px;
+  justify-content: center;
+  font-size: 0.74rem;
+  color: var(--muted);
+  opacity: 0.7;
+}
+.hints kbd { margin-left: 0; margin-right: 6px; }
+
+/* Nothing but the countdown while it is actually running. */
+html[data-status="running"] .hints { display: none; }
+
+:fullscreen .hints { display: none; }
+:fullscreen { --clock-size: clamp(6rem, 30vw, 34rem); --logo-size: clamp(44px, 10vh, 150px); }
+:fullscreen .meta { opacity: 0.6; }
+
+/* Branding on: hand a little height back to the logo, never enough for it to
+   rival the countdown. */
+html[data-brand="on"] { --clock-size: clamp(4.6rem, 22vw, 21rem); }
+html[data-brand="on"]:fullscreen { --clock-size: clamp(5rem, 26vw, 28rem); }
+
+/* Short screens (13" laptops, 768p projectors) — the stage must still fit. */
+@media (max-height: 800px) {
+  :root { --logo-size: clamp(26px, 6.5vh, 60px); }
+  html[data-brand="on"] { --clock-size: clamp(4rem, 19vw, 15rem); }
+}
+@media (max-height: 560px) {
+  :root { --logo-size: clamp(22px, 6vh, 44px); }
+  .event-name { display: none; }
+}
+
+@media (max-width: 700px) {
+  .preset-grid { grid-template-columns: 1fr; }
+  .hints { display: none; }
+  .btn kbd { display: none; }
+  .branding-body { grid-template-columns: 1fr; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition-duration: 1ms !important; }
+}
